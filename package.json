@@ -1,0 +1,17 @@
+{
+  "name": "absensi-sman-3-sarmi",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev --port 8889"
+  },
+  "dependencies": {
+    "@netlify/database": "latest",
+    "@netlify/functions": "latest",
+    "drizzle-orm": "beta"
+  },
+  "devDependencies": {
+    "drizzle-kit": "beta",
+    "typescript": "latest"
+  }
+}

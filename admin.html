@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Absensi - SMA Negeri 3 Sarmi</title>
+<meta name="description" content="Panel pengelolaan absensi guru dan staf SMA Negeri 3 Sarmi.">
+<meta name="application-name" content="Admin Absensi SMA Negeri 3 Sarmi">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:"DM Sans",sans-serif;background:radial-gradient(circle at 85% 0,#dceade 0,transparent 28%),#f3f1e8;color:#17251f}
+.wrap{max-width:1180px;margin:auto;padding:18px}.top{background:linear-gradient(135deg,#10271e,#214c38);color:#fff;border-radius:18px;padding:22px 24px;margin-bottom:16px;border-bottom:3px solid #d9772a}
+.top h1{font-family:Manrope,sans-serif;letter-spacing:.04em;margin:0;font-size:22px}.top p{margin:5px 0 0;color:#d8e6dc}
+.card{background:#fff;border:1px solid #dbe3ec;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 6px 22px #0f172a0d}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.kpi{background:#f8fafc;border-radius:14px;padding:15px}.kpi b{display:block;font-size:28px;margin-top:4px}
+input,select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;margin:6px 0 10px}
+button{border:0;border-radius:10px;padding:11px 14px;font:700 13px "DM Sans",sans-serif;cursor:pointer;transition:transform .18s ease,filter .18s ease}button:hover{filter:brightness(.96);transform:translateY(-1px)}.primary{background:#d9772a;color:#fff}.green{background:#26714b;color:#fff}.red{background:#b83a37;color:#fff}.light{background:#e5e8e1;color:#17251f}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:130px}.status{padding:11px;border-radius:10px;background:#f8fafc;margin:10px 0;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+.scroll{overflow:auto}.hidden{display:none!important}.login{max-width:430px;margin:8vh auto}.small{font-size:12px;color:#64748b}.nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.nav button{flex:1;min-width:130px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e2e8f0;font-size:11px}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:520px){.wrap{padding:10px}.grid{grid-template-columns:1fr 1fr}.row>*{min-width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>SMA NEGERI 3 SARMI</h1>
+    <p>Panel Admin — Absensi Guru & Staf Tata Usaha</p>
+  </div>
+  <div id="app"></div>
+</div>
+<script src="config.js"></script>
+<script>
+const API=(window.APP_CONFIG&&window.APP_CONFIG.API_URL)||"";
+let TOKEN=sessionStorage.getItem("ADMIN_TOKEN")||"";
+let cache={};
+
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function apiGet(action,params={}){
+ return new Promise((resolve,reject)=>{
+  if(!API) return reject("API absensi belum dikonfigurasi.");
+  const cb="cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+  const s=document.createElement("script");
+  const q=new URLSearchParams({api:"1",action,callback:cb,token:TOKEN,...params});
+  s.src=API+"?"+q.toString();
+  window[cb]=r=>{delete window[cb];s.remove();resolve(r)};
+  s.onerror=()=>{delete window[cb];s.remove();reject("Tidak dapat terhubung ke layanan absensi.")};
+  document.body.appendChild(s);
+ });
+}
+function apiPost(action,payload){
+ return new Promise((resolve,reject)=>{
+  if(!API) return reject("API absensi belum dikonfigurasi.");
+  const cb="post_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+  const f=document.createElement("form");f.method="POST";f.action=API;f.target="sink";f.style.display="none";
+  [["action",action],["payload",JSON.stringify({...payload,token:TOKEN,callback:cb})]].forEach(([n,v])=>{let i=document.createElement("input");i.name=n;i.value=v;f.appendChild(i)});
+  document.body.appendChild(f);f.submit();setTimeout(()=>f.remove(),1200);
+  // Mutations are followed by a fresh read after the request settles.
+  setTimeout(()=>resolve({success:true}),1400);
+ });
+}
+function renderLogin(msg=""){
+ document.getElementById("app").innerHTML=`<div class="card login">
+ <h2>Login Admin</h2><p class="small">Masuk untuk mengelola absensi SMA Negeri 3 Sarmi.</p>
+ <label>Username</label><input id="u" value="admin" autocomplete="username">
+ <label>Password</label><input id="p" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+ <button class="primary" style="width:100%" onclick="login()">MASUK</button>
+ <div id="status" class="status">${esc(msg||"Gunakan akun Admin yang telah dikonfigurasi di Apps Script.")}</div>
+ </div>`;
+}
+async function login(){
+ const u=document.getElementById("u").value.trim(),p=document.getElementById("p").value;
+ const s=document.getElementById("status");s.textContent="Memeriksa...";
+ try{
+  const r=await apiGet("adminLogin",{username:u,password:p});
+  if(!r.success){s.textContent=r.message||"Login gagal";return}
+  TOKEN=r.token;sessionStorage.setItem("ADMIN_TOKEN",TOKEN);renderDashboard();
+ }catch(e){s.textContent=String(e)}
+}
+function logout(){TOKEN="";sessionStorage.removeItem("ADMIN_TOKEN");renderLogin("Anda sudah keluar.");}
+async function renderDashboard(){
+ document.getElementById("app").innerHTML=`<div class="nav">
+ <button class="primary" onclick="dashboard()">Dashboard</button>
+ <button class="light" onclick="employees()">Guru & Staf</button>
+ <button class="light" onclick="attendance()">Absensi</button>
+ <button class="green" onclick="sendWA('daily')">WA Hari Ini</button>
+ <button class="green" onclick="sendWA('monthly')">WA Bulanan</button>
+ <button class="red" onclick="logout()">Keluar</button>
+ </div><div id="view"></div>`;
+ dashboard();
+}
+async function dashboard(){
+ const v=document.getElementById("view");v.innerHTML=`<div class="card"><b>Memuat dashboard...</b></div>`;
+ try{
+  const r=await apiGet("adminDashboard");if(!r.success){if(r.auth===false)return logout();throw Error(r.message)}
+  const s=r.stats||{}, recent=r.recent||[];
+  v.innerHTML=`<div class="grid">
+   <div class="kpi">Guru & Staf<b>${s.personel||0}</b></div>
+   <div class="kpi">Hadir<b>${s.hadir||0}</b></div>
+   <div class="kpi">Terlambat<b>${s.terlambat||0}</b></div>
+   <div class="kpi">Belum Absen<b>${s.belum||0}</b></div>
+  </div>
+  <div class="card"><h3>Ringkasan Hari Ini</h3><div class="row">
+   <button class="green" onclick="sendWA('daily')">Kirim Laporan Hari Ini via WhatsApp</button>
+   <button class="primary" onclick="sendWA('monthly')">Kirim Laporan Bulanan via WhatsApp</button>
+  </div><div id="dashStatus" class="status">Data diperbarui: ${esc(r.generatedAt||"")}</div></div>
+  <div class="card"><h3>Absensi Terbaru</h3>${tableLogs(recent)}</div>`;
+ }catch(e){v.innerHTML=`<div class="card"><div class="status">${esc(String(e))}</div></div>`}
+}
+function tableLogs(rows){
+ if(!rows.length)return "<p class='small'>Belum ada data.</p>";
+ return `<div class="scroll"><table><tr><th>Tanggal</th><th>NIK</th><th>Nama</th><th>Masuk</th><th>Pulang</th><th>Status</th></tr>${rows.map(x=>`<tr><td>${esc(x.tanggal)}</td><td>${esc(x.nik)}</td><td>${esc(x.nama)}</td><td>${esc(x.jamMasuk)}</td><td>${esc(x.jamPulang)}</td><td>${esc(x.status)}</td></tr>`).join("")}</table></div>`;
+}
+async function employees(){
+ const v=document.getElementById("view");v.innerHTML=`<div class="card"><h3>Data Guru & Staf TU</h3><button class="green" onclick="addEmployee()">+ Tambah Personel</button><div id="empBox" class="status">Memuat...</div></div>`;
+ try{const r=await apiGet("adminEmployees");if(!r.success)throw Error(r.message);cache.employees=r.employees||[];document.getElementById("empBox").outerHTML=`<div class="scroll"><table><tr><th>NIK</th><th>Nama</th><th>Jabatan/Divisi</th><th>Face ID</th><th>Aksi</th></tr>${cache.employees.map(x=>`<tr><td>${esc(x.nik)}</td><td>${esc(x.nama)}</td><td>${esc(x.divisi)}</td><td>${x.hasFace?'<span class="badge">Terdaftar</span>':'<span class="badge">Belum</span>'}</td><td><button class="light" onclick='editEmployee(${JSON.stringify(x)})'>Edit</button> <button class="red" onclick='deleteEmployee("${esc(x.id)}")'>Nonaktifkan</button></td></tr>`).join("")}</table></div>`}catch(e){document.getElementById("empBox").textContent=String(e)}
+}
+function addEmployee(){editEmployee({id:"",nik:"",nama:"",divisi:"Guru",wa:"",active:true,desc:[]});}
+function editEmployee(x){
+ const v=document.getElementById("view");v.innerHTML=`<div class="card"><h3>${x.id?"Edit":"Tambah"} Personel</h3>
+ <input id="eid" type="hidden" value="${esc(x.id)}"><label>NIK</label><input id="enik" value="${esc(x.nik)}">
+ <label>Nama Lengkap</label><input id="enama" value="${esc(x.nama)}">
+ <label>Jabatan/Divisi</label><input id="ediv" value="${esc(x.divisi)}">
+ <label>Nomor WhatsApp</label><input id="ewa" value="${esc(x.wa||"")}" placeholder="628xxxxxxxxxx">
+ <div class="row"><button class="primary" onclick="saveEmployee()">Simpan</button><button class="light" onclick="employees()">Batal</button></div>
+ <div id="es" class="status">Face ID dapat diregistrasikan melalui halaman absensi/registrasi.</div></div>`;
+}
+async function saveEmployee(){
+ const p={id:document.getElementById("eid").value,nik:document.getElementById("enik").value.trim(),nama:document.getElementById("enama").value.trim(),divisi:document.getElementById("ediv").value.trim(),wa:document.getElementById("ewa").value.trim(),active:true};
+ if(!p.nik||!p.nama)return alert("NIK dan nama wajib diisi.");
+ await apiPost("adminSaveEmployee",p);document.getElementById("es").textContent="Disimpan. Memuat ulang...";setTimeout(employees,1800);
+}
+async function deleteEmployee(id){
+ if(!confirm("Nonaktifkan personel ini?"))return;
+ await apiPost("adminDeleteEmployee",{id});setTimeout(employees,1800);
+}
+async function attendance(){
+ const v=document.getElementById("view");v.innerHTML=`<div class="card"><h3>Riwayat Absensi</h3>
+ <div class="row"><input id="from" type="date"><input id="to" type="date"><button class="primary" onclick="loadAttendance()">Tampilkan</button></div>
+ <div id="ab" class="status">Pilih rentang tanggal.</div></div>`;
+ const d=new Date().toISOString().slice(0,10);document.getElementById("from").value=d;document.getElementById("to").value=d;
+ loadAttendance();
+}
+async function loadAttendance(){
+ const box=document.getElementById("ab");box.textContent="Memuat...";
+ try{const r=await apiGet("adminAttendance",{from:document.getElementById("from").value,to:document.getElementById("to").value});if(!r.success)throw Error(r.message);box.outerHTML=tableLogs(r.rows||[])}catch(e){box.textContent=String(e)}
+}
+async function sendWA(kind){
+ try{
+  const r=await apiGet("adminWhatsApp",{kind});if(!r.success)throw Error(r.message);
+  const phone=prompt("Nomor WhatsApp tujuan, contoh 6281234567890:",r.phone||"");
+  if(!phone)return;
+  const p=phone.replace(/\D/g,"").replace(/^0/,"62");
+  window.open("https://wa.me/"+p+"?text="+encodeURIComponent(r.message),"_blank");
+ }catch(e){alert(String(e))}
+}
+(async()=>{if(!TOKEN)renderLogin();else{try{const r=await apiGet("adminCheck");if(r.success)renderDashboard();else{TOKEN="";renderLogin("Sesi habis. Silakan login kembali.")}}catch(e){renderLogin(String(e))}}})();
+</script>
+<iframe name="sink" style="display:none"></iframe>
+</body>
+</html>

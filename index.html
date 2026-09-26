@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0f172a">
+<title>Absensi Guru & Staf - SMA Negeri 3 Sarmi</title>
+<meta name="description" content="Sistem absensi digital guru dan staf SMA Negeri 3 Sarmi dengan verifikasi wajah dan lokasi.">
+<meta name="application-name" content="Absensi SMA Negeri 3 Sarmi">
+<meta property="og:title" content="Absensi SMA Negeri 3 Sarmi"><meta property="og:description" content="Sistem absensi digital guru dan staf dengan verifikasi wajah dan lokasi.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+:root{--bg:#10271e;--card:#fff;--primary:#d9772a;--green:#26714b;--red:#b83a37;--muted:#647069}
+*{box-sizing:border-box}body{margin:0;font-family:"DM Sans",sans-serif;background:radial-gradient(circle at 20% 0,#dceade 0,transparent 32%),#f3f1e8;color:#17251f}
+.wrap{max-width:580px;margin:auto;min-height:100vh;background:#fbfaf5;box-shadow:0 0 60px #10271e18}.hidden{display:none!important}
+header{background:linear-gradient(135deg,#10271e,#214c38);color:white;padding:22px 24px;position:sticky;top:0;z-index:5;border-bottom:3px solid #d9772a}
+header h1{font-family:Manrope,sans-serif;letter-spacing:.04em;font-size:18px;margin:0}header p{margin:6px 0 0;font-size:12px;color:#d8e6dc}
+main{padding:22px}.card{background:white;border:1px solid #dce4dc;border-radius:20px;padding:20px;margin-bottom:16px;box-shadow:0 12px 32px #10271e0d;animation:arrive .42s ease both}@keyframes arrive{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+input,select{width:100%;padding:13px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:15px;margin:7px 0 12px}
+button{border:0;border-radius:11px;padding:13px 16px;font:700 13px "DM Sans",sans-serif;cursor:pointer;transition:transform .18s ease,filter .18s ease}button:hover{filter:brightness(.96);transform:translateY(-1px)}button:active{transform:translateY(1px)}
+.primary{background:var(--primary);color:white}.green{background:var(--green);color:white}.red{background:var(--red);color:white}.light{background:#e2e8f0;color:#0f172a}
+.row{display:flex;gap:10px}.row>*{flex:1}.center{text-align:center}
+.camera{width:100%;aspect-ratio:4/3;background:#111827;border-radius:16px;object-fit:cover;transform:scaleX(-1)}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#e2e8f0;font-size:12px;margin-top:10px}
+.status{padding:12px;border-radius:10px;background:#f8fafc;margin:10px 0;font-size:13px}
+nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}nav button{flex:1;min-width:100px}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kpi{background:#f8fafc;border-radius:12px;padding:12px;text-align:center}.kpi b{display:block;font-size:22px}
+a{color:#2563eb;text-decoration:none}.small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>SMA NEGERI 3 SARMI</h1><p>Absensi Guru & Staf Tata Usaha • Face ID + GPS</p></header>
+<main id="app"></main>
+</div>
+<script>
+const API=(window.APP_CONFIG&&window.APP_CONFIG.API_URL)||"";
+let stream=null,currentEmp=null,faceReady=false,locationData={lat:"",lng:"",alamat:""};
+
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function checkApi(){if(!API){document.getElementById("app").innerHTML=`<div class="card"><h2>Layanan belum tersedia</h2><p>API absensi belum dikonfigurasi. Hubungi administrator sekolah.</p></div>`;return false}return true}
+function apiGet(action,params={}){return new Promise((resolve,reject)=>{if(!checkApi())return reject("API belum dikonfigurasi");const cb="cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);const s=document.createElement("script");const q=new URLSearchParams({api:"1",action,callback:cb,...params});s.src=API+"?"+q.toString();window[cb]=r=>{delete window[cb];s.remove();resolve(r)};s.onerror=()=>{delete window[cb];s.remove();reject("Gagal terhubung ke backend")};document.body.appendChild(s);});}
+function apiPost(action,payload){if(!checkApi())return;const f=document.createElement("form");f.method="POST";f.action=API;f.target="api_sink";f.style.display="none";const a=document.createElement("input");a.name="action";a.value=action;const p=document.createElement("input");p.name="payload";p.value=JSON.stringify(payload);f.append(a,p);document.body.appendChild(f);f.submit();setTimeout(()=>f.remove(),1000);}
+function msg(t,ok=true){const el=document.getElementById("status");if(el){el.textContent=t;el.style.background=ok?"#ecfdf5":"#fef2f2";el.style.color=ok?"#166534":"#991b1b"}}
+
+function home(){
+ stopCamera();
+ document.getElementById("app").innerHTML=`<div class="card center"><h2>Absensi</h2><p class="small">Masukkan NIK Guru/Staf untuk memulai.</p>
+ <input id="nik" placeholder="NIK / Nomor Pegawai" autocomplete="off">
+ <button class="primary" style="width:100%" onclick="login()">Mulai Absensi</button>
+ <nav><button class="light" onclick="registerPage()">Registrasi Face ID</button><button class="light" onclick="adminPage()">Admin</button></nav>
+ </div><div id="status" class="status">Siap.</div>`;
+}
+async function login(){
+ const nik=document.getElementById("nik").value.trim();if(!nik)return msg("Masukkan NIK.",false);
+ msg("Mencari data...");
+ try{const r=await apiGet("employee",{nik});if(!r.success) return msg(r.message||"Data tidak ditemukan.",false);
+ currentEmp=r.data;attendancePage(r.status);
+ }catch(e){msg(String(e),false)}
+}
+async function attendancePage(status){
+ document.getElementById("app").innerHTML=`<div class="card"><h2>${esc(currentEmp.nama)}</h2><p class="small">${esc(currentEmp.nik)} • ${esc(currentEmp.divisi)}</p>
+ <video id="cam" class="camera" autoplay playsinline muted></video><div class="center"><span id="camBadge" class="badge">Kamera belum aktif</span></div>
+ <div id="status" class="status">Menyiapkan kamera dan Face ID...</div>
+ <div class="row"><button class="light" onclick="home()">Kembali</button><button id="absBtn" class="${status==='sudah_masuk'?'green':'primary'}" disabled onclick="absen('${status}')">${status==='belum_masuk'?'ABSEN MASUK':status==='sudah_masuk'?'ABSEN PULANG':'SELESAI'}</button></div>
+ </div>`;
+ await startCamera();
+ getLocation();
+}
+async function startCamera(){
+ const v=document.getElementById("cam");if(!v)return;
+ if(!window.isSecureContext){msg("Kamera membutuhkan HTTPS. Buka situs melalui HTTPS.",false);return}
+ if(!navigator.mediaDevices?.getUserMedia){msg("Browser tidak mendukung kamera.",false);return}
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:1280},height:{ideal:720}},audio:false});v.srcObject=stream;document.getElementById("camBadge").textContent="KAMERA AKTIF";await loadModels();}
+ catch(e){msg(e.name==="NotAllowedError"?"Izin kamera ditolak. Izinkan Camera di browser lalu coba lagi.":e.name==="NotReadableError"?"Kamera sedang dipakai aplikasi lain.":("Kamera gagal: "+e.message),false)}
+}
+async function loadModels(){
+ if(faceReady)return;
+ msg("Memuat model Face ID...");
+ try{const base="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";await Promise.all([
+ faceapi.nets.tinyFaceDetector.loadFromUri(base),faceapi.nets.faceLandmark68Net.loadFromUri(base),faceapi.nets.faceRecognitionNet.loadFromUri(base)
+ ]);faceReady=true;const b=document.getElementById("absBtn");if(b)b.disabled=false;msg("Face ID siap. Pastikan wajah berada di tengah kamera.");}
+ catch(e){msg("Model Face ID gagal dimuat. Periksa internet.",false)}
+}
+function getLocation(){
+ if(!navigator.geolocation)return;
+ navigator.geolocation.getCurrentPosition(async p=>{
+  locationData.lat=p.coords.latitude;locationData.lng=p.coords.longitude;
+  try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${p.coords.latitude}&lon=${p.coords.longitude}`);const d=await r.json();locationData.alamat=d.display_name||"";msg("GPS terkunci. Siap melakukan absensi.");}
+  catch(e){msg("GPS terkunci. Alamat tidak tersedia, koordinat tetap disimpan.");}
+ },()=>msg("GPS belum diizinkan. Aktifkan lokasi agar absensi dapat mencatat lokasi.",false),{enableHighAccuracy:true,timeout:10000});
+}
+async function absen(type){
+ const v=document.getElementById("cam"),b=document.getElementById("absBtn");if(!faceReady||!stream)return msg("Kamera/Face ID belum siap.",false);
+ if(!locationData.lat)return msg("Tunggu GPS terkunci.",false);
+ b.disabled=true;b.textContent="MEMVERIFIKASI...";
+ try{
+  const c=document.createElement("canvas");c.width=v.videoWidth;c.height=v.videoHeight;c.getContext("2d").drawImage(v,0,0);
+  const d=await faceapi.detectSingleFace(c,new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+  if(!d)throw new Error("Wajah tidak terdeteksi. Posisikan wajah di tengah kamera.");
+  const saved=currentEmp.desc||[];if(!saved.length)throw new Error("Face ID belum terdaftar.");
+  const dist=faceapi.euclideanDistance(d.descriptor,new Float32Array(saved));if(dist>0.5)throw new Error("Wajah tidak cocok dengan data terdaftar.");
+  const foto=c.toDataURL("image/jpeg",0.55);
+  apiPost("attendance",{id:currentEmp.id,type,foto,lat:locationData.lat,lng:locationData.lng,alamat:locationData.alamat});
+  msg("Absensi dikirim ke server. Silakan tunggu beberapa detik.");
+  setTimeout(home,2200);
+ }catch(e){msg(e.message||String(e),false);b.disabled=false;b.textContent=type==="belum_masuk"?"ABSEN MASUK":"ABSEN PULANG";}
+}
+function stopCamera(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
+function registerPage(){
+ stopCamera();document.getElementById("app").innerHTML=`<div class="card"><h2>Registrasi Face ID</h2><p class="small">Gunakan foto wajah yang jelas dan hanya satu wajah.</p>
+ <input id="rnama" placeholder="Nama lengkap"><input id="rnik" placeholder="NIK / Nomor Pegawai"><input id="rfoto" type="file" accept="image/*" capture="user">
+ <div id="rpreview" class="center"></div><button class="green" style="width:100%" onclick="registerFace()">Simpan Face ID</button><button class="light" style="width:100%;margin-top:8px" onclick="home()">Kembali</button></div><div id="status" class="status">Siap.</div>`;
+}
+async function registerFace(){
+ const nama=document.getElementById("rnama").value.trim(),nik=document.getElementById("rnik").value.trim(),file=document.getElementById("rfoto").files[0];
+ if(!nama||!nik||!file)return msg("Lengkapi nama, NIK, dan foto.",false);
+ if(!faceReady){try{const base="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(base),faceapi.nets.faceLandmark68Net.loadFromUri(base),faceapi.nets.faceRecognitionNet.loadFromUri(base)]);faceReady=true}catch(e){return msg("Model Face ID gagal dimuat.",false)}}
+ msg("Mendeteksi wajah...");
+ const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(file)});
+ const c=document.createElement("canvas");c.width=img.width;c.height=img.height;c.getContext("2d").drawImage(img,0,0);
+ try{const d=await faceapi.detectSingleFace(c,new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();if(!d)return msg("Wajah tidak terdeteksi.",false);
+  const sm=document.createElement("canvas");sm.width=200;sm.height=200;sm.getContext("2d").drawImage(img,0,0,200,200);
+  apiPost("selfRegister",{nama,nik,foto:sm.toDataURL("image/jpeg",.6),desc:Array.from(d.descriptor)});msg("Registrasi dikirim. Admin dapat memeriksa data di Google Sheet.");setTimeout(home,1800);
+ }catch(e){msg("Gagal: "+e.message,false)}
+}
+async function adminPage(){
+ stopCamera();document.getElementById("app").innerHTML=`<div class="card"><h2>Admin</h2><div id="status" class="status">Memuat data...</div>
+ <div id="admin"></div><nav><button class="light" onclick="home()">Kembali</button><button class="green" onclick="wa('daily')">WA Hari Ini</button><button class="primary" onclick="wa('monthly')">WA Bulanan</button></nav></div>`;
+ try{const [st,emp,log,set]=await Promise.all([apiGet("stats"),apiGet("employees"),apiGet("attendance"),apiGet("settings")]);
+ document.getElementById("status").textContent="Backend terhubung.";
+ const a=emp.employees||[],rows=(log.attendance||[]).slice(-30).reverse();
+ document.getElementById("admin").innerHTML=`<div class="kpis"><div class="kpi"><b>${st.stats?.totalHadir||0}</b>Hadir</div><div class="kpi"><b>${st.stats?.totalTerlambat||0}</b>Terlambat</div><div class="kpi"><b>${a.length}</b>Personel</div></div>
+ <h3>Data Personel</h3><table><tr><th>NIK</th><th>Nama</th><th>Divisi</th><th>Face</th></tr>${a.map(x=>`<tr><td>${esc(x.nik)}</td><td>${esc(x.nama)}</td><td>${esc(x.divisi)}</td><td>${x.hasFace?"✓":"-"}</td></tr>`).join("")}</table>
+ <h3 style="margin-top:18px">Log Terbaru</h3><table><tr><th>Tanggal</th><th>Nama</th><th>Masuk</th><th>Pulang</th></tr>${rows.map(x=>`<tr><td>${esc(x.tanggal||"")}</td><td>${esc(x.nama||"")}</td><td>${esc(x.jamMasuk||"")}</td><td>${esc(x.jamPulang||"")}</td></tr>`).join("")}</table>`;
+ }catch(e){msg(String(e),false)}
+}
+function wa(kind){apiGet("wa",{kind}).then(r=>{if(!r.success)return msg(r.message||"Gagal membuat laporan",false);const phone=prompt("Nomor WhatsApp tujuan (contoh 6281234567890):");if(!phone)return;const p=phone.replace(/\D/g,"").replace(/^0/,"62");window.open("https://wa.me/"+p+"?text="+encodeURIComponent(r.message),"_blank")}).catch(e=>msg(String(e),false))}
+window.addEventListener("beforeunload",stopCamera);
+document.addEventListener("DOMContentLoaded",home);
+</script>
+<iframe name="api_sink" style="display:none"></iframe>
+</body>
+</html>
