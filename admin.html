@@ -4,17 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin Absensi - SMA Negeri 3 Sarmi</title>
-<meta name="description" content="Panel pengelolaan absensi guru dan staf SMA Negeri 3 Sarmi.">
-<meta name="application-name" content="Admin Absensi SMA Negeri 3 Sarmi">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:"DM Sans",sans-serif;background:radial-gradient(circle at 85% 0,#dceade 0,transparent 28%),#f3f1e8;color:#17251f}
-.wrap{max-width:1180px;margin:auto;padding:18px}.top{background:linear-gradient(135deg,#10271e,#214c38);color:#fff;border-radius:18px;padding:22px 24px;margin-bottom:16px;border-bottom:3px solid #d9772a}
-.top h1{font-family:Manrope,sans-serif;letter-spacing:.04em;margin:0;font-size:22px}.top p{margin:5px 0 0;color:#d8e6dc}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,system-ui,sans-serif;background:#eef2f7;color:#0f172a}
+.wrap{max-width:1180px;margin:auto;padding:18px}.top{background:#0f172a;color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:16px}
+.top h1{margin:0;font-size:22px}.top p{margin:5px 0 0;color:#cbd5e1}
 .card{background:#fff;border:1px solid #dbe3ec;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:0 6px 22px #0f172a0d}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.kpi{background:#f8fafc;border-radius:14px;padding:15px}.kpi b{display:block;font-size:28px;margin-top:4px}
 input,select{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;margin:6px 0 10px}
-button{border:0;border-radius:10px;padding:11px 14px;font:700 13px "DM Sans",sans-serif;cursor:pointer;transition:transform .18s ease,filter .18s ease}button:hover{filter:brightness(.96);transform:translateY(-1px)}.primary{background:#d9772a;color:#fff}.green{background:#26714b;color:#fff}.red{background:#b83a37;color:#fff}.light{background:#e5e8e1;color:#17251f}
+button{border:0;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.green{background:#16a34a;color:#fff}.red{background:#dc2626;color:#fff}.light{background:#e2e8f0;color:#0f172a}
 .row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:130px}.status{padding:11px;border-radius:10px;background:#f8fafc;margin:10px 0;font-size:13px}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
 .scroll{overflow:auto}.hidden{display:none!important}.login{max-width:430px;margin:8vh auto}.small{font-size:12px;color:#64748b}.nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.nav button{flex:1;min-width:130px}
@@ -32,31 +29,31 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;borde
 </div>
 <script src="config.js"></script>
 <script>
-const API=(window.APP_CONFIG&&window.APP_CONFIG.API_URL)||"https://script.google.com/macros/s/AKfycbzE1ILw_nXW94B1USo9elBV25iXh3dim6k1boBiYgCtixXJvQovYdSgu9ArVlK1vfBG/exec";
+const API=(window.APP_CONFIG&&window.APP_CONFIG.API_URL)||"";
 let TOKEN=sessionStorage.getItem("ADMIN_TOKEN")||"";
 let cache={};
 
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
 function apiGet(action,params={}){
  return new Promise((resolve,reject)=>{
-  if(!API) return reject("API absensi belum dikonfigurasi.");
+  if(!API||API.includes("PASTE_URL")) return reject("Isi API_URL pada config.js terlebih dahulu.");
   const cb="cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
   const s=document.createElement("script");
   const q=new URLSearchParams({api:"1",action,callback:cb,token:TOKEN,...params});
   s.src=API+"?"+q.toString();
   window[cb]=r=>{delete window[cb];s.remove();resolve(r)};
-  s.onerror=()=>{delete window[cb];s.remove();reject("Tidak dapat terhubung ke layanan absensi.")};
+  s.onerror=()=>{delete window[cb];s.remove();reject("Tidak dapat terhubung ke Google Apps Script.")};
   document.body.appendChild(s);
  });
 }
 function apiPost(action,payload){
  return new Promise((resolve,reject)=>{
-  if(!API) return reject("API absensi belum dikonfigurasi.");
+  if(!API||API.includes("PASTE_URL")) return reject("Isi API_URL pada config.js terlebih dahulu.");
   const cb="post_"+Date.now()+"_"+Math.random().toString(36).slice(2);
   const f=document.createElement("form");f.method="POST";f.action=API;f.target="sink";f.style.display="none";
   [["action",action],["payload",JSON.stringify({...payload,token:TOKEN,callback:cb})]].forEach(([n,v])=>{let i=document.createElement("input");i.name=n;i.value=v;f.appendChild(i)});
   document.body.appendChild(f);f.submit();setTimeout(()=>f.remove(),1200);
-  // Mutations are followed by a fresh read after the request settles.
+  // Apps Script POST redirects; refresh/read after a short delay.
   setTimeout(()=>resolve({success:true}),1400);
  });
 }

@@ -1,8 +1,7 @@
 [build]
   publish = "."
 
-[functions]
-  directory = "netlify/functions"
+# Static site: no build command is required.
 
 [[headers]]
   for = "/*"
@@ -10,8 +9,3 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(self), geolocation=(self)"
-
-[[redirects]]
-  from = "/admin"
-  to = "/admin.html"
-  status = 200

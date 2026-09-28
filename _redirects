@@ -1,0 +1,10 @@
+# Halaman utama
+/ /index.html 200
+
+# Panel admin
+/admin /admin.html 200
+/admin/ /admin.html 200
+
+# Halaman aplikasi alternatif
+/app /index.html 200
+/app/ /index.html 200
